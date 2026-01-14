@@ -41,7 +41,7 @@ type disabledTools struct {
 	search, datasource, incident,
 	prometheus, loki, alerting,
 	dashboard, folder, oncall, asserts, sift, admin,
-	pyroscope, navigation, proxied, annotations, rendering, write bool
+	pyroscope, navigation, proxied, annotations, rendering, write, postgres bool
 }
 
 // Configuration for the Grafana client.
@@ -57,7 +57,7 @@ type grafanaConfig struct {
 }
 
 func (dt *disabledTools) addFlags() {
-	flag.StringVar(&dt.enabledTools, "enabled-tools", "search,datasource,incident,prometheus,loki,alerting,dashboard,folder,oncall,asserts,sift,pyroscope,navigation,proxied,annotations,rendering", "A comma separated list of tools enabled for this server. Can be overwritten entirely or by disabling specific components, e.g. --disable-search.")
+	flag.StringVar(&dt.enabledTools, "enabled-tools", "search,datasource,incident,prometheus,loki,alerting,dashboard,folder,oncall,asserts,sift,admin,pyroscope,navigation,proxied,annotations,rendering,postgres", "A comma separated list of tools enabled for this server. Can be overwritten entirely or by disabling specific components, e.g. --disable-search.")
 	flag.BoolVar(&dt.search, "disable-search", false, "Disable search tools")
 	flag.BoolVar(&dt.datasource, "disable-datasource", false, "Disable datasource tools")
 	flag.BoolVar(&dt.incident, "disable-incident", false, "Disable incident tools")
@@ -76,6 +76,7 @@ func (dt *disabledTools) addFlags() {
 	flag.BoolVar(&dt.write, "disable-write", false, "Disable write tools (create/update operations)")
 	flag.BoolVar(&dt.annotations, "disable-annotations", false, "Disable annotation tools")
 	flag.BoolVar(&dt.rendering, "disable-rendering", false, "Disable rendering tools (panel/dashboard image export)")
+	flag.BoolVar(&dt.postgres, "disable-postgres", false, "Disable postgres tools")
 }
 
 func (gc *grafanaConfig) addFlags() {
@@ -107,6 +108,7 @@ func (dt *disabledTools) addTools(s *server.MCPServer) {
 	maybeAddTools(s, tools.AddNavigationTools, enabledTools, dt.navigation, "navigation")
 	maybeAddTools(s, func(mcp *server.MCPServer) { tools.AddAnnotationTools(mcp, enableWriteTools) }, enabledTools, dt.annotations, "annotations")
 	maybeAddTools(s, tools.AddRenderingTools, enabledTools, dt.rendering, "rendering")
+	maybeAddTools(s, tools.AddPostgresTools, enabledTools, dt.postgres, "postgres")
 }
 
 func newServer(transport string, dt disabledTools) (*server.MCPServer, *mcpgrafana.ToolManager) {
