@@ -148,9 +148,50 @@ docker rm mcp-grafana-server
 
 ## Connecting Clients
 
+### Claude Code CLI
+
+Add the MCP server using the `claude mcp add` command:
+
+```bash
+claude mcp add grafana --transport sse --url http://your-server:8000/sse
+```
+
+To verify it was added:
+
+```bash
+claude mcp list
+```
+
+To remove:
+
+```bash
+claude mcp remove grafana
+```
+
+### OpenAI Codex CLI
+
+Add to your Codex configuration file (`~/.codex/config.json` or project-level `.codex/config.json`):
+
+```json
+{
+  "mcpServers": {
+    "grafana": {
+      "type": "sse",
+      "url": "http://your-server:8000/sse"
+    }
+  }
+}
+```
+
+Or use the CLI:
+
+```bash
+codex mcp add grafana --url http://your-server:8000/sse
+```
+
 ### Claude Desktop
 
-Add to `~/.config/Claude/claude_desktop_config.json`:
+Add to `~/.config/Claude/claude_desktop_config.json` (Linux) or `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 
 ```json
 {
