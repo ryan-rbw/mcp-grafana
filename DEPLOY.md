@@ -34,8 +34,65 @@ A new `query_postgres` tool for executing raw SQL queries against PostgreSQL and
 1. Docker installed on the target server
 2. A Grafana service account token with appropriate permissions
 3. Network access from the server to your Grafana instance
+4. Go 1.24+ (only if building on the server)
 
-### Step 1: Build the Docker Image
+---
+
+### Option A: Build and Deploy on the Server (No Registry Required)
+
+If you don't have a container registry, you can clone and build directly on the destination server.
+
+#### Step 1: Clone the repository
+
+```bash
+git clone https://github.com/ryan-rbw/mcp-grafana.git
+cd mcp-grafana
+```
+
+#### Step 2: Build the Docker image
+
+```bash
+make build-image
+```
+
+#### Step 3: Create token file
+
+```bash
+sudo mkdir -p /etc/mcp-grafana
+echo "your-service-account-token" | sudo tee /etc/mcp-grafana/token
+sudo chmod 600 /etc/mcp-grafana/token
+```
+
+#### Step 4: Configure and deploy
+
+Edit `deploy_mcp_server.sh` to set your Grafana host and IP:
+
+```bash
+GRAFANA_HOST="your-grafana.example.com"
+GRAFANA_IP="10.x.x.x"  # Internal IP if DNS doesn't resolve inside Docker
+```
+
+Then deploy:
+
+```bash
+chmod +x deploy_mcp_server.sh
+./deploy_mcp_server.sh
+```
+
+#### Step 5: Verify
+
+```bash
+curl http://localhost:8000/healthz
+# Returns: ok
+```
+
+---
+
+### Option B: Build Locally and Transfer Image
+
+If you prefer to build on a separate machine and transfer the image.
+
+#### Step 1: Build the Docker image
 
 On your build machine:
 
@@ -43,20 +100,21 @@ On your build machine:
 make build-image
 ```
 
-Then push to your container registry, or copy the image to your server:
+#### Step 2: Transfer to server
 
 ```bash
-# Option A: Push to registry
+# Option 1: Push to registry
 docker tag mcp-grafana:latest your-registry.com/mcp-grafana:latest
 docker push your-registry.com/mcp-grafana:latest
 
-# Option B: Save and transfer
+# Option 2: Save and transfer (no registry required)
 docker save mcp-grafana:latest | gzip > mcp-grafana.tar.gz
 scp mcp-grafana.tar.gz user@server:/tmp/
-# On server: docker load < /tmp/mcp-grafana.tar.gz
+# On server:
+docker load < /tmp/mcp-grafana.tar.gz
 ```
 
-### Step 2: Create Token File (Recommended)
+#### Step 3: Create token file (on server)
 
 Store your Grafana service account token securely:
 
