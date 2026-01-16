@@ -24,6 +24,28 @@ HTTP_PORT=8001
 # Metrics configuration (set ENABLE_METRICS=true to enable)
 ENABLE_METRICS="${ENABLE_METRICS:-false}"
 
+# Stop and remove any existing MCP Grafana containers
+cleanup_existing() {
+    echo "Checking for existing MCP Grafana containers..."
+
+    # Find all containers matching mcp-grafana pattern
+    EXISTING=$(docker ps -a --filter "name=mcp-grafana" --format "{{.Names}}" 2>/dev/null || true)
+
+    if [ -n "$EXISTING" ]; then
+        echo "Found existing containers: $EXISTING"
+        for container in $EXISTING; do
+            echo "  Stopping $container..."
+            docker stop "$container" 2>/dev/null || true
+            echo "  Removing $container..."
+            docker rm "$container" 2>/dev/null || true
+        done
+        echo "Cleanup complete."
+    else
+        echo "No existing containers found."
+    fi
+    echo ""
+}
+
 # Load token from environment or file
 load_token() {
     if [ -z "$GRAFANA_SERVICE_ACCOUNT_TOKEN" ]; then
@@ -53,10 +75,6 @@ deploy_container() {
     fi
 
     echo "Deploying $CONTAINER_NAME (transport: $TRANSPORT_FLAG, port: $PORT, metrics: $ENABLE_METRICS)..."
-
-    # Stop and remove existing container
-    docker stop "$CONTAINER_NAME" 2>/dev/null || true
-    docker rm "$CONTAINER_NAME" 2>/dev/null || true
 
     # Build command arguments
     local EXTRA_ARGS=""
@@ -91,6 +109,7 @@ deploy_container() {
 }
 
 # Main
+cleanup_existing
 load_token
 
 MODE="${1:-both}"
