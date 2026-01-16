@@ -206,15 +206,19 @@ docker rm mcp-grafana-server
 
 ## Connecting Clients
 
-The server supports two transport modes:
+The server supports two transport modes on different ports:
 
-- **SSE** (`/sse`): For Claude Desktop, Claude Code CLI
-- **Streamable HTTP** (`/mcp`): For Codex CLI and newer MCP clients
+| Transport       | Port | Endpoint | Clients                          |
+|-----------------|------|----------|----------------------------------|
+| SSE             | 8000 | `/sse`   | Claude Desktop, Claude Code CLI  |
+| Streamable HTTP | 8001 | `/mcp`   | Codex CLI, newer MCP clients     |
 
-The deploy script defaults to `streamable-http`. To use SSE instead:
+By default, the deploy script starts **both** containers:
 
 ```bash
-TRANSPORT=sse ./deploy_mcp_server.sh
+./deploy_mcp_server.sh        # Deploy both SSE and HTTP
+./deploy_mcp_server.sh sse    # Deploy only SSE (port 8000)
+./deploy_mcp_server.sh http   # Deploy only HTTP (port 8001)
 ```
 
 ### Claude Code CLI
@@ -222,11 +226,11 @@ TRANSPORT=sse ./deploy_mcp_server.sh
 Add the MCP server using the `claude mcp add` command:
 
 ```bash
-# For streamable-http transport (default)
-claude mcp add --transport http grafana http://your-server:8000/mcp
-
-# For SSE transport
+# SSE transport (port 8000)
 claude mcp add --transport sse grafana http://your-server:8000/sse
+
+# Or streamable HTTP transport (port 8001)
+claude mcp add --transport http grafana http://your-server:8001/mcp
 ```
 
 To verify it was added:
@@ -243,13 +247,13 @@ claude mcp remove grafana
 
 ### OpenAI Codex CLI
 
-Codex CLI requires streamable HTTP transport (the default). Add to your Codex configuration file (`~/.codex/config.json` or project-level `.codex/config.json`):
+Codex CLI requires streamable HTTP transport (port 8001). Add to your Codex configuration file (`~/.codex/config.json` or project-level `.codex/config.json`):
 
 ```json
 {
   "mcpServers": {
     "grafana": {
-      "url": "http://your-server:8000/mcp"
+      "url": "http://your-server:8001/mcp"
     }
   }
 }

@@ -1,43 +1,54 @@
 #!/bin/bash
-# Status script for MCP Grafana server
+# Status script for MCP Grafana server(s)
 
-CONTAINER_NAME="mcp-grafana-server"
+SSE_PORT=8000
+HTTP_PORT=8001
 
-echo "=== MCP Grafana Server Status ==="
-echo ""
+check_container() {
+    local NAME=$1
+    local PORT=$2
+    local ENDPOINT=$3
 
-# Check if container exists
-if ! docker inspect "$CONTAINER_NAME" &>/dev/null; then
-    echo "Container '$CONTAINER_NAME' not found."
-    echo "Run ./deploy_mcp_server.sh to start it."
-    exit 1
-fi
+    echo "=== $NAME ==="
 
-# Get container details
-docker inspect "$CONTAINER_NAME" --format='
-Container:       {{.Name}}
-Image:           {{.Config.Image}}
-Status:          {{.State.Status}}
+    if ! docker inspect "$NAME" &>/dev/null; then
+        echo "Status: Not deployed"
+        echo ""
+        return
+    fi
+
+    docker inspect "$NAME" --format='Status:          {{.State.Status}}
 Running:         {{.State.Running}}
 Started:         {{.State.StartedAt}}
 Restart Count:   {{.RestartCount}}
-Restart Policy:  {{.HostConfig.RestartPolicy.Name}}
-'
+Restart Policy:  {{.HostConfig.RestartPolicy.Name}}'
 
-echo "=== Health Check ==="
-if curl -sf http://localhost:8000/healthz >/dev/null 2>&1; then
-    echo "Health: OK"
-else
-    echo "Health: FAILED (server not responding)"
+    # Health check
+    if curl -sf "http://localhost:$PORT/healthz" >/dev/null 2>&1; then
+        echo "Health:          OK"
+        echo "Endpoint:        http://localhost:$PORT$ENDPOINT"
+    else
+        echo "Health:          FAILED"
+    fi
+    echo ""
+}
+
+echo ""
+check_container "mcp-grafana-sse" "$SSE_PORT" "/sse"
+check_container "mcp-grafana-http" "$HTTP_PORT" "/mcp"
+
+# Also check for legacy single container
+if docker inspect "mcp-grafana-server" &>/dev/null; then
+    echo "=== mcp-grafana-server (legacy) ==="
+    docker inspect "mcp-grafana-server" --format='Status: {{.State.Status}}'
+    echo "Note: Consider migrating to mcp-grafana-sse/mcp-grafana-http"
+    echo ""
 fi
 
-echo ""
-echo "=== Recent Logs (last 10 lines) ==="
-docker logs --tail 10 "$CONTAINER_NAME" 2>&1
-
-echo ""
 echo "=== Useful Commands ==="
-echo "  View full logs:    docker logs -f $CONTAINER_NAME"
-echo "  Restart:           docker restart $CONTAINER_NAME"
-echo "  Stop:              docker stop $CONTAINER_NAME"
-echo "  Redeploy:          ./deploy_mcp_server.sh"
+echo "  Deploy both:   ./deploy_mcp_server.sh"
+echo "  Deploy SSE:    ./deploy_mcp_server.sh sse"
+echo "  Deploy HTTP:   ./deploy_mcp_server.sh http"
+echo "  View logs:     docker logs -f mcp-grafana-sse"
+echo "                 docker logs -f mcp-grafana-http"
+echo "  Stop all:      docker stop mcp-grafana-sse mcp-grafana-http"
