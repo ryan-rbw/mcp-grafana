@@ -206,12 +206,27 @@ docker rm mcp-grafana-server
 
 ## Connecting Clients
 
+The server supports two transport modes:
+
+- **SSE** (`/sse`): For Claude Desktop, Claude Code CLI
+- **Streamable HTTP** (`/mcp`): For Codex CLI and newer MCP clients
+
+The deploy script defaults to `streamable-http`. To use SSE instead:
+
+```bash
+TRANSPORT=sse ./deploy_mcp_server.sh
+```
+
 ### Claude Code CLI
 
 Add the MCP server using the `claude mcp add` command:
 
 ```bash
-claude mcp add grafana --transport sse --url http://your-server:8000/sse
+# For streamable-http transport (default)
+claude mcp add --transport http grafana http://your-server:8000/mcp
+
+# For SSE transport
+claude mcp add --transport sse grafana http://your-server:8000/sse
 ```
 
 To verify it was added:
@@ -228,28 +243,21 @@ claude mcp remove grafana
 
 ### OpenAI Codex CLI
 
-Add to your Codex configuration file (`~/.codex/config.json` or project-level `.codex/config.json`):
+Codex CLI requires streamable HTTP transport (the default). Add to your Codex configuration file (`~/.codex/config.json` or project-level `.codex/config.json`):
 
 ```json
 {
   "mcpServers": {
     "grafana": {
-      "type": "sse",
-      "url": "http://your-server:8000/sse"
+      "url": "http://your-server:8000/mcp"
     }
   }
 }
 ```
 
-Or use the CLI:
-
-```bash
-codex mcp add grafana --url http://your-server:8000/sse
-```
-
 ### Claude Desktop
 
-Add to `~/.config/Claude/claude_desktop_config.json` (Linux) or `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
+Claude Desktop requires SSE transport. Deploy with `TRANSPORT=sse ./deploy_mcp_server.sh`, then add to `~/.config/Claude/claude_desktop_config.json` (Linux) or `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 
 ```json
 {

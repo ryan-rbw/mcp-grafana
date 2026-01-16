@@ -10,6 +10,11 @@ GRAFANA_HOST="graphs.i.kepler.engineering"
 GRAFANA_IP="10.240.97.4"
 LISTEN_ADDRESS="0.0.0.0:8000"
 
+# Transport type: "sse" or "streamable-http"
+# - sse: Server-Sent Events, endpoint at /sse (Claude Desktop, Claude Code CLI)
+# - streamable-http: HTTP streaming, endpoint at /mcp (Codex CLI, newer clients)
+TRANSPORT="${TRANSPORT:-streamable-http}"
+
 # Load token from environment or file
 # Option 1: Set GRAFANA_SERVICE_ACCOUNT_TOKEN in environment before running
 # Option 2: Create /etc/mcp-grafana/token with the token value
@@ -28,7 +33,7 @@ echo "Stopping existing container (if running)..."
 docker stop "$CONTAINER_NAME" 2>/dev/null || true
 docker rm "$CONTAINER_NAME" 2>/dev/null || true
 
-echo "Starting MCP Grafana server..."
+echo "Starting MCP Grafana server (transport: $TRANSPORT)..."
 docker run -d \
   --name "$CONTAINER_NAME" \
   --restart=always \
@@ -37,17 +42,24 @@ docker run -d \
   -e GRAFANA_URL="https://$GRAFANA_HOST" \
   -e GRAFANA_SERVICE_ACCOUNT_TOKEN="$GRAFANA_SERVICE_ACCOUNT_TOKEN" \
   "$IMAGE" \
-  --transport sse \
+  --transport "$TRANSPORT" \
   --address "$LISTEN_ADDRESS" \
   --tls-skip-verify
 
 echo "Waiting for startup..."
 sleep 2
 
+# Determine endpoint based on transport
+if [ "$TRANSPORT" = "sse" ]; then
+    ENDPOINT="/sse"
+else
+    ENDPOINT="/mcp"
+fi
+
 # Health check
 if curl -sf http://localhost:8000/healthz > /dev/null; then
     echo "MCP Grafana server is running and healthy"
-    echo "Endpoint: http://localhost:8000/sse"
+    echo "Endpoint: http://localhost:8000$ENDPOINT"
 else
     echo "Warning: Health check failed. Check logs with: docker logs $CONTAINER_NAME"
 fi
