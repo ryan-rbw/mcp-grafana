@@ -181,6 +181,7 @@ docker logs -f mcp-grafana-server
 | `--tls-skip-verify` | Skip TLS verification | `false` |
 | `--disable-postgres` | Disable PostgreSQL tools | `false` |
 | `--disable-write` | Disable all write operations | `false` |
+| `--enable-metrics` | Enable Prometheus metrics at `/metrics` | `false` |
 
 See `./mcp-grafana --help` for the full list.
 
@@ -279,3 +280,56 @@ Claude Desktop requires SSE transport. Deploy with `TRANSPORT=sse ./deploy_mcp_s
 curl http://your-server:8000/healthz
 # Returns: ok
 ```
+
+---
+
+## Prometheus Metrics
+
+The MCP server can expose Prometheus metrics for monitoring network traffic and tool usage.
+
+### Enabling Metrics
+
+**Via deploy script:**
+
+```bash
+ENABLE_METRICS=true ./deploy_mcp_server.sh
+```
+
+**Via CLI flag:**
+
+```bash
+./mcp-grafana --transport sse --address 0.0.0.0:8000 --enable-metrics
+```
+
+### Metrics Endpoint
+
+When enabled, metrics are available at `/metrics` on the same port as the MCP server:
+
+```bash
+# SSE transport
+curl http://your-server:8000/metrics
+
+# HTTP transport
+curl http://your-server:8001/metrics
+```
+
+### Available Metrics
+
+| Metric                                       | Type      | Description                                              |
+|----------------------------------------------|-----------|----------------------------------------------------------|
+| `mcp_grafana_http_requests_total`            | Counter   | Total HTTP requests (by direction, method, host, status) |
+| `mcp_grafana_http_request_duration_seconds`  | Histogram | HTTP request latency                                     |
+| `mcp_grafana_http_request_size_bytes`        | Histogram | Request body size                                        |
+| `mcp_grafana_http_response_size_bytes`       | Histogram | Response body size                                       |
+| `mcp_grafana_http_active_connections`        | Gauge     | Currently active connections                             |
+| `mcp_grafana_tool_calls_total`               | Counter   | MCP tool invocations (by tool, status)                   |
+| `mcp_grafana_tool_call_duration_seconds`     | Histogram | Tool execution time                                      |
+
+### Grafana Dashboard
+
+You can scrape these metrics with Prometheus and visualize them in Grafana to monitor:
+
+- Request rates and latency to Grafana API
+- Tool usage patterns
+- Error rates by endpoint
+- Network traffic volume

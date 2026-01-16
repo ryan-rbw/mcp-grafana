@@ -20,6 +20,7 @@ import (
 	"github.com/go-openapi/strfmt"
 	"github.com/grafana/grafana-openapi-client-go/client"
 	"github.com/grafana/incident-go"
+	"github.com/grafana/mcp-grafana/metrics"
 	"github.com/mark3labs/mcp-go/server"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
@@ -156,6 +157,10 @@ type GrafanaConfig struct {
 	// A Timeout of zero means no timeout.
 	// Default is 10 seconds.
 	Timeout time.Duration
+
+	// EnableMetrics enables Prometheus metrics collection for HTTP requests.
+	// When enabled, all outbound HTTP requests will be instrumented.
+	EnableMetrics bool
 }
 
 const (
@@ -290,6 +295,14 @@ func NewUserAgentTransport(rt http.RoundTripper, userAgent ...string) *UserAgent
 // wrapWithUserAgent wraps an http.RoundTripper with user agent tracking
 func wrapWithUserAgent(rt http.RoundTripper) http.RoundTripper {
 	return NewUserAgentTransport(rt)
+}
+
+// wrapWithMetrics wraps an http.RoundTripper with Prometheus metrics collection if enabled
+func wrapWithMetrics(rt http.RoundTripper, enableMetrics bool) http.RoundTripper {
+	if enableMetrics {
+		return metrics.WrapTransport(rt)
+	}
+	return rt
 }
 
 // OrgIDRoundTripper wraps an http.RoundTripper to add the X-Grafana-Org-Id header.
@@ -521,9 +534,17 @@ func NewGrafanaClient(ctx context.Context, grafanaURL, apiKey string, auth *url.
 						timeoutTransport.TLSClientConfig = cfg.TLSConfig
 					}
 					userAgentWrapped := wrapWithUserAgent(timeoutTransport)
-					wrapped := otelhttp.NewTransport(userAgentWrapped)
+
+					// Build transport chain: timeout -> user agent -> metrics (optional) -> otel
+					var wrapped http.RoundTripper = userAgentWrapped
+					if config.EnableMetrics {
+						wrapped = metrics.WrapTransport(wrapped)
+						slog.Debug("Prometheus metrics enabled for Grafana client")
+					}
+					wrapped = otelhttp.NewTransport(wrapped)
+
 					transportField.Set(reflect.ValueOf(wrapped))
-					slog.Debug("HTTP tracing, user agent tracking, and timeout enabled for Grafana client", "timeout", timeout)
+					slog.Debug("HTTP tracing, user agent tracking, and timeout enabled for Grafana client", "timeout", timeout, "metrics", config.EnableMetrics)
 				}
 			}
 		}
@@ -599,16 +620,19 @@ var ExtractIncidentClientFromEnv server.StdioContextFunc = func(ctx context.Cont
 			slog.Error("Failed to create custom transport for incident client, using default", "error", err)
 		} else {
 			orgIDWrapped := NewOrgIDRoundTripper(transport, config.OrgID)
-			client.HTTPClient.Transport = wrapWithUserAgent(orgIDWrapped)
+			wrapped := wrapWithMetrics(wrapWithUserAgent(orgIDWrapped), config.EnableMetrics)
+			client.HTTPClient.Transport = wrapped
 			slog.Debug("Using custom TLS configuration, user agent, and org ID support for incident client",
 				"cert_file", tlsConfig.CertFile,
 				"ca_file", tlsConfig.CAFile,
-				"skip_verify", tlsConfig.SkipVerify)
+				"skip_verify", tlsConfig.SkipVerify,
+				"metrics", config.EnableMetrics)
 		}
 	} else {
 		// No custom TLS, but still add org ID and user agent
 		orgIDWrapped := NewOrgIDRoundTripper(http.DefaultTransport, config.OrgID)
-		client.HTTPClient.Transport = wrapWithUserAgent(orgIDWrapped)
+		wrapped := wrapWithMetrics(wrapWithUserAgent(orgIDWrapped), config.EnableMetrics)
+		client.HTTPClient.Transport = wrapped
 	}
 
 	return context.WithValue(ctx, incidentClientKey{}, client)
@@ -629,16 +653,19 @@ var ExtractIncidentClientFromHeaders httpContextFunc = func(ctx context.Context,
 			slog.Error("Failed to create custom transport for incident client, using default", "error", err)
 		} else {
 			orgIDWrapped := NewOrgIDRoundTripper(transport, orgID)
-			client.HTTPClient.Transport = wrapWithUserAgent(orgIDWrapped)
+			wrapped := wrapWithMetrics(wrapWithUserAgent(orgIDWrapped), config.EnableMetrics)
+			client.HTTPClient.Transport = wrapped
 			slog.Debug("Using custom TLS configuration, user agent, and org ID support for incident client",
 				"cert_file", tlsConfig.CertFile,
 				"ca_file", tlsConfig.CAFile,
-				"skip_verify", tlsConfig.SkipVerify)
+				"skip_verify", tlsConfig.SkipVerify,
+				"metrics", config.EnableMetrics)
 		}
 	} else {
 		// No custom TLS, but still add org ID and user agent
 		orgIDWrapped := NewOrgIDRoundTripper(http.DefaultTransport, orgID)
-		client.HTTPClient.Transport = wrapWithUserAgent(orgIDWrapped)
+		wrapped := wrapWithMetrics(wrapWithUserAgent(orgIDWrapped), config.EnableMetrics)
+		client.HTTPClient.Transport = wrapped
 	}
 
 	return context.WithValue(ctx, incidentClientKey{}, client)

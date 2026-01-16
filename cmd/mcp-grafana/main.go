@@ -16,6 +16,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	mcpgrafana "github.com/grafana/mcp-grafana"
 	"github.com/grafana/mcp-grafana/tools"
@@ -54,6 +55,9 @@ type grafanaConfig struct {
 	tlsKeyFile    string
 	tlsCAFile     string
 	tlsSkipVerify bool
+
+	// Whether to enable Prometheus metrics collection
+	enableMetrics bool
 }
 
 func (dt *disabledTools) addFlags() {
@@ -87,6 +91,9 @@ func (gc *grafanaConfig) addFlags() {
 	flag.StringVar(&gc.tlsKeyFile, "tls-key-file", "", "Path to TLS private key file for client authentication")
 	flag.StringVar(&gc.tlsCAFile, "tls-ca-file", "", "Path to TLS CA certificate file for server verification")
 	flag.BoolVar(&gc.tlsSkipVerify, "tls-skip-verify", false, "Skip TLS certificate verification (insecure)")
+
+	// Metrics configuration
+	flag.BoolVar(&gc.enableMetrics, "enable-metrics", false, "Enable Prometheus metrics endpoint at /metrics")
 }
 
 func (dt *disabledTools) addTools(s *server.MCPServer) {
@@ -241,6 +248,14 @@ func handleHealthz(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("ok"))
 }
 
+// registerMetricsHandler registers the /metrics endpoint if metrics are enabled
+func registerMetricsHandler(mux *http.ServeMux, enableMetrics bool) {
+	if enableMetrics {
+		mux.Handle("/metrics", promhttp.Handler())
+		slog.Info("Prometheus metrics endpoint enabled at /metrics")
+	}
+}
+
 func run(transport, addr, basePath, endpointPath string, logLevel slog.Level, dt disabledTools, gc mcpgrafana.GrafanaConfig, tls tlsConfig) error {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})))
 	s, tm := newServer(transport, dt)
@@ -302,9 +317,10 @@ func run(transport, addr, basePath, endpointPath string, logLevel slog.Level, dt
 		}
 		mux.Handle(basePath, srv)
 		mux.HandleFunc("/healthz", handleHealthz)
+		registerMetricsHandler(mux, gc.EnableMetrics)
 		httpSrv.Handler = mux
 		slog.Info("Starting Grafana MCP server using SSE transport",
-			"version", mcpgrafana.Version(), "address", addr, "basePath", basePath)
+			"version", mcpgrafana.Version(), "address", addr, "basePath", basePath, "metrics", gc.EnableMetrics)
 		return runHTTPServer(ctx, srv, addr, "SSE")
 	case "streamable-http":
 		httpSrv := &http.Server{Addr: addr}
@@ -321,9 +337,10 @@ func run(transport, addr, basePath, endpointPath string, logLevel slog.Level, dt
 		mux := http.NewServeMux()
 		mux.Handle(endpointPath, srv)
 		mux.HandleFunc("/healthz", handleHealthz)
+		registerMetricsHandler(mux, gc.EnableMetrics)
 		httpSrv.Handler = mux
 		slog.Info("Starting Grafana MCP server using StreamableHTTP transport",
-			"version", mcpgrafana.Version(), "address", addr, "endpointPath", endpointPath)
+			"version", mcpgrafana.Version(), "address", addr, "endpointPath", endpointPath, "metrics", gc.EnableMetrics)
 		return runHTTPServer(ctx, srv, addr, "StreamableHTTP")
 	default:
 		return fmt.Errorf("invalid transport type: %s. Must be 'stdio', 'sse' or 'streamable-http'", transport)
@@ -358,7 +375,10 @@ func main() {
 	}
 
 	// Convert local grafanaConfig to mcpgrafana.GrafanaConfig
-	grafanaConfig := mcpgrafana.GrafanaConfig{Debug: gc.debug}
+	grafanaConfig := mcpgrafana.GrafanaConfig{
+		Debug:         gc.debug,
+		EnableMetrics: gc.enableMetrics,
+	}
 	if gc.tlsCertFile != "" || gc.tlsKeyFile != "" || gc.tlsCAFile != "" || gc.tlsSkipVerify {
 		grafanaConfig.TLSConfig = &mcpgrafana.TLSConfig{
 			CertFile:   gc.tlsCertFile,

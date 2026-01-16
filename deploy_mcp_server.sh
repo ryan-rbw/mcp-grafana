@@ -7,6 +7,9 @@
 #   ./deploy_mcp_server.sh sse          # Deploy only SSE transport (port 8000)
 #   ./deploy_mcp_server.sh http         # Deploy only HTTP transport (port 8001)
 #   ./deploy_mcp_server.sh both         # Deploy both (default)
+#
+# Environment variables:
+#   ENABLE_METRICS=true                 # Enable Prometheus metrics at /metrics
 
 set -e
 
@@ -17,6 +20,9 @@ GRAFANA_IP="10.240.97.4"
 # Ports for each transport
 SSE_PORT=8000
 HTTP_PORT=8001
+
+# Metrics configuration (set ENABLE_METRICS=true to enable)
+ENABLE_METRICS="${ENABLE_METRICS:-false}"
 
 # Load token from environment or file
 load_token() {
@@ -46,11 +52,17 @@ deploy_container() {
         TRANSPORT_FLAG="streamable-http"
     fi
 
-    echo "Deploying $CONTAINER_NAME (transport: $TRANSPORT_FLAG, port: $PORT)..."
+    echo "Deploying $CONTAINER_NAME (transport: $TRANSPORT_FLAG, port: $PORT, metrics: $ENABLE_METRICS)..."
 
     # Stop and remove existing container
     docker stop "$CONTAINER_NAME" 2>/dev/null || true
     docker rm "$CONTAINER_NAME" 2>/dev/null || true
+
+    # Build command arguments
+    local EXTRA_ARGS=""
+    if [ "$ENABLE_METRICS" = "true" ]; then
+        EXTRA_ARGS="--enable-metrics"
+    fi
 
     # Start new container
     docker run -d \
@@ -63,7 +75,8 @@ deploy_container() {
       "$IMAGE" \
       --transport "$TRANSPORT_FLAG" \
       --address "0.0.0.0:$PORT" \
-      --tls-skip-verify
+      --tls-skip-verify \
+      $EXTRA_ARGS
 
     sleep 2
 
@@ -107,6 +120,12 @@ echo ""
 echo "Endpoints:"
 [ "$MODE" = "sse" ] || [ "$MODE" = "both" ] || [ "$MODE" = "all" ] && echo "  SSE (Claude):  http://localhost:$SSE_PORT/sse"
 [ "$MODE" = "http" ] || [ "$MODE" = "mcp" ] || [ "$MODE" = "both" ] || [ "$MODE" = "all" ] && echo "  HTTP (Codex):  http://localhost:$HTTP_PORT/mcp"
+if [ "$ENABLE_METRICS" = "true" ]; then
+    echo ""
+    echo "Metrics:"
+    [ "$MODE" = "sse" ] || [ "$MODE" = "both" ] || [ "$MODE" = "all" ] && echo "  SSE:           http://localhost:$SSE_PORT/metrics"
+    [ "$MODE" = "http" ] || [ "$MODE" = "mcp" ] || [ "$MODE" = "both" ] || [ "$MODE" = "all" ] && echo "  HTTP:          http://localhost:$HTTP_PORT/metrics"
+fi
 echo ""
 echo "Useful commands:"
 echo "  View logs:     docker logs -f mcp-grafana-sse"
